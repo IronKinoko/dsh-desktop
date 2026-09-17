@@ -88,10 +88,7 @@ final class DSHWebService: ObservableObject {
         process.arguments = [
             "-c",
             """
-            pids=$(/usr/sbin/lsof -t -i :3080 2>/dev/null)
-            if [ -n "$pids" ]; then
-                kill -9 $pids
-            fi
+            kill -9 $(lsof -t -i :3080)
             """
         ]
         process.standardInput = FileHandle.nullDevice

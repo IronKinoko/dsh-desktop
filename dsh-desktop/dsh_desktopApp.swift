@@ -13,7 +13,7 @@ struct dsh_desktopApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        Window("dsh", id: "main") {
+        Window("Deepseek Harness", id: "main") {
             ContentView(webService: appDelegate.webService)
         }
         .defaultSize(width: 1200, height: 800)

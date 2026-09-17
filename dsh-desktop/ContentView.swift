@@ -42,6 +42,7 @@ private struct WebView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let webView = WKWebView()
+        webView.navigationDelegate = context.coordinator
         webView.load(URLRequest(url: url))
         return webView
     }
@@ -49,5 +50,22 @@ private struct WebView: NSViewRepresentable {
     func updateNSView(_ webView: WKWebView, context: Context) {
         guard webView.url != url else { return }
         webView.load(URLRequest(url: url))
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    final class Coordinator: NSObject, WKNavigationDelegate {
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            let script = """
+            (() => {
+              const style = document.createElement('style');
+              style.textContent = `[data-slot="sidebar"] > div { padding-top: 26px !important; }`;
+              document.head.appendChild(style);
+            })();
+            """
+            webView.evaluateJavaScript(script)
+        }
     }
 }
