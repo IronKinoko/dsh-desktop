@@ -5,6 +5,7 @@
 //  Created by Kinoko on 2026/9/17.
 //
 
+import AppKit
 import SwiftUI
 import WebKit
 
@@ -18,6 +19,7 @@ struct ContentView: View {
                 ProgressView("Starting dsh web...")
             case .running(let url):
                 WebView(url: url)
+                    .id(webService.reloadID)
             case .failed(let message):
                 VStack(spacing: 12) {
                     Image(systemName: "exclamationmark.triangle")
@@ -43,6 +45,7 @@ private struct WebView: NSViewRepresentable {
     func makeNSView(context: Context) -> WKWebView {
         let webView = WKWebView()
         webView.navigationDelegate = context.coordinator
+        webView.uiDelegate = context.coordinator
         webView.load(URLRequest(url: url))
         return webView
     }
@@ -56,7 +59,7 @@ private struct WebView: NSViewRepresentable {
         Coordinator()
     }
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             let script = """
             (() => {
@@ -66,6 +69,29 @@ private struct WebView: NSViewRepresentable {
             })();
             """
             webView.evaluateJavaScript(script)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            createWebViewWith configuration: WKWebViewConfiguration,
+            for navigationAction: WKNavigationAction,
+            windowFeatures: WKWindowFeatures
+        ) -> WKWebView? {
+            guard navigationAction.targetFrame == nil,
+                  let url = navigationAction.request.url,
+                  let scheme = url.scheme?.lowercased(),
+                  scheme == "http" || scheme == "https"
+            else {
+                return nil
+            }
+
+            if url.host == webView.url?.host {
+                webView.load(navigationAction.request)
+            } else {
+                NSWorkspace.shared.open(url)
+            }
+
+            return nil
         }
     }
 }

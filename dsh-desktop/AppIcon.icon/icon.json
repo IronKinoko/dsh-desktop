@@ -1,16 +1,36 @@
 {
-  "fill" : {
-    "solid" : "display-p3:0.99121,0.99121,0.99121,1.00000"
-  },
+  "fill" : "automatic",
   "groups" : [
     {
+      "blur-material" : null,
       "layers" : [
         {
-          "fill" : "automatic",
+          "blend-mode-specializations" : [
+            {
+              "value" : "normal"
+            },
+            {
+              "appearance" : "tinted",
+              "value" : "normal"
+            }
+          ],
+          "fill-specializations" : [
+            {
+              "value" : "automatic"
+            },
+            {
+              "appearance" : "tinted",
+              "value" : {
+                "solid" : "extended-gray:1.00000,1.00000"
+              }
+            }
+          ],
+          "glass" : false,
+          "hidden" : false,
           "image-name" : "favicon.svg",
           "name" : "favicon",
           "position" : {
-            "scale" : 18,
+            "scale" : 17,
             "translation-in-points" : [
               0,
               0
@@ -18,6 +38,12 @@
           }
         }
       ],
+      "lighting" : "individual",
+      "refractivity" : {
+        "depth" : 0,
+        "enabled" : false,
+        "strength" : 0.5
+      },
       "shadow" : {
         "kind" : "neutral",
         "opacity" : 0.5
