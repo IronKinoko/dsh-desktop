@@ -93,7 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusMenu.delegate = self
         statusMenu.addItem(
             NSMenuItem(
-                title: "重启服务",
+                title: "Restart",
                 action: #selector(restartWebService),
                 keyEquivalent: ""
             )
@@ -101,7 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusMenu.addItem(.separator())
         statusMenu.addItem(
             NSMenuItem(
-                title: "退出",
+                title: "Quit",
                 action: #selector(quitApplication),
                 keyEquivalent: "q"
             )

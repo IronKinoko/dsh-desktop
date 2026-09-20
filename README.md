@@ -17,14 +17,14 @@ The app starts a local `dsh web --no-open` process, loads the printed authentica
   - Left click: open the main window.
   - Right click: open the menu.
 - Menu actions:
-  - `重启服务`: restart `dsh web` and reload the web view.
-  - `退出`: stop the service and quit the app.
+  - `Restart`: restart `dsh web` and reload the web view.
+  - `Quit`: stop the service and quit the app.
 - External HTTP(S) links opened by the web UI are handed to the default browser.
 
 ## Requirements
 
-- macOS 27 or later.
-- Xcode 27 or later.
+- macOS 26 or later.
+- Xcode 26 or later.
 - A working `dsh` installation. The app looks for it in:
   - `~/.local/share/fnm/aliases/default/bin`
   - active fnm multishell directories
@@ -35,7 +35,7 @@ The app starts a local `dsh web --no-open` process, loads the printed authentica
   - `/usr/local/bin`
   - `/usr/bin`, `/bin`, `/usr/sbin`, `/sbin`
 
-The current project targets macOS 27.0 because it is built with the macOS 26/27 icon and menu bar APIs.
+The current project targets macOS 26.0 and uses the macOS 26 icon and menu bar APIs.
 
 ## Build
 
@@ -72,7 +72,7 @@ cp -R "/tmp/dsh-desktop-release/Build/Products/Release/Deepseek Harness.app" /Ap
 
 It parses the authenticated URL printed by `dsh`, then exposes that URL through `DSHWebState.running`. `ContentView` renders it in `WKWebView`.
 
-When `重启服务` is selected, the app stops the current process, waits for port `3080` to be released, starts a new process, increments `reloadID`, and recreates the web view so the new token URL is loaded.
+When `Restart` is selected, the app stops the current process, waits for port `3080` to be released, starts a new process, increments `reloadID`, and recreates the web view so the new token URL is loaded.
 
 ## Project Layout
 
