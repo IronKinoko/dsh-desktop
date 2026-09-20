@@ -44,6 +44,7 @@ private struct WebView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let webView = WKWebView()
+        webView.isInspectable = true
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         webView.load(URLRequest(url: url))

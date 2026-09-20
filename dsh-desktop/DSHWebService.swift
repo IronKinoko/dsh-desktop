@@ -10,6 +10,8 @@ enum DSHWebState: Equatable {
 
 @MainActor
 final class DSHWebService: ObservableObject {
+    private static let webPort = 49258
+
     @Published private(set) var state: DSHWebState = .starting
     @Published private(set) var reloadID = 0
 
@@ -42,7 +44,10 @@ final class DSHWebService: ObservableObject {
         let environment = processEnvironment()
 
         process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-c", "exec \"$DSH_EXECUTABLE\" web --no-open"]
+        process.arguments = [
+            "-c",
+            "exec \"$DSH_EXECUTABLE\" web --no-open --port \(Self.webPort)"
+        ]
         process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
         process.environment = environment
         process.standardInput = FileHandle.nullDevice
@@ -147,14 +152,14 @@ final class DSHWebService: ObservableObject {
     }
 
     private func clearExistingWebService() -> PortClearResult {
-        let listenerPIDs = listeningPIDs(onPort: 3080)
+        let listenerPIDs = listeningPIDs(onPort: Self.webPort)
         guard !listenerPIDs.isEmpty else {
             return .cleared
         }
 
         guard listenerPIDs.allSatisfy(isDshWebProcess) else {
             return .blocked(
-                "Port 3080 is already in use by another process. Close it and reopen the app."
+                "Port \(Self.webPort) is already in use by another process. Close it and reopen the app."
             )
         }
 
@@ -168,13 +173,13 @@ final class DSHWebService: ObservableObject {
             kill(pid, SIGKILL)
         }
 
-        for _ in 0..<20 where !listeningPIDs(onPort: 3080).isEmpty {
+        for _ in 0..<20 where !listeningPIDs(onPort: Self.webPort).isEmpty {
             usleep(50_000)
         }
 
-        guard listeningPIDs(onPort: 3080).isEmpty else {
+        guard listeningPIDs(onPort: Self.webPort).isEmpty else {
             return .blocked(
-                "Unable to free port 3080 from the previous dsh web process."
+                "Unable to free port \(Self.webPort) from the previous dsh web process."
             )
         }
 
@@ -229,8 +234,9 @@ final class DSHWebService: ObservableObject {
 
     private func isDshWebProcess(_ pid: pid_t) -> Bool {
         let command = processCommand(pid)
-        return command == "dsh web --no-open"
-            || command.hasSuffix("/dsh web --no-open")
+        let expectedArguments = "web --no-open --port \(Self.webPort)"
+        return command == "dsh \(expectedArguments)"
+            || command.hasSuffix("/dsh \(expectedArguments)")
     }
 
     private func processExists(_ pid: pid_t) -> Bool {

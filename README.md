@@ -2,7 +2,7 @@
 
 A lightweight macOS shell around the [`dsh web`](https://www.npmjs.com/package/@deepseek-ai/dsh) interface.
 
-The app starts a local `dsh web --no-open` process, loads the printed authenticated URL in a `WKWebView`, and keeps the service available from the menu bar when the main window is closed.
+The app starts a local `dsh web --no-open --port 49258` process, loads the printed authenticated URL in a `WKWebView`, and keeps the service available from the menu bar when the main window is closed.
 
 ## Features
 
@@ -10,8 +10,8 @@ The app starts a local `dsh web --no-open` process, loads the printed authentica
 - Uses the `dsh` executable found in common fnm, Volta, Bun, Homebrew, and local bin locations.
 - Does not depend on a terminal `PATH`, so it also works when launched from Finder.
 - Starts a fresh `dsh web` process with its own authentication token.
-- Detects an existing `dsh web` listener on port `3080` and replaces it safely.
-- Refuses to terminate an unrelated process occupying port `3080`.
+- Detects an existing `dsh web` listener on port `49258` and replaces it safely.
+- Refuses to terminate an unrelated process occupying port `49258`.
 - Keeps the service running after the main window is closed.
 - Menu bar icon:
   - Left click: open the main window.
@@ -67,12 +67,12 @@ cp -R "/tmp/dsh-desktop-release/Build/Products/Release/Deepseek Harness.app" /Ap
 `DSHWebService` launches:
 
 ```sh
-"$DSH_EXECUTABLE" web --no-open
+"$DSH_EXECUTABLE" web --no-open --port 49258
 ```
 
 It parses the authenticated URL printed by `dsh`, then exposes that URL through `DSHWebState.running`. `ContentView` renders it in `WKWebView`.
 
-When `Restart` is selected, the app stops the current process, waits for port `3080` to be released, starts a new process, increments `reloadID`, and recreates the web view so the new token URL is loaded.
+When `Restart` is selected, the app stops the current process, waits for port `49258` to be released, starts a new process, increments `reloadID`, and recreates the web view so the new token URL is loaded.
 
 ## Project Layout
 
@@ -88,7 +88,7 @@ dsh-desktop/
 
 ## Notes
 
-- The app currently uses port `3080`, which is the default port used by `dsh web`.
+- The app uses port `49258` and passes it explicitly with `--port`.
 - The token URL is process-specific. The app does not reuse a token from an older `dsh web` process.
 - `TrayIcon` is intentionally separate from `AppIcon.icon`. Application icons use the full rounded-square composition, while menu bar icons have different sizing and rendering requirements.
 
