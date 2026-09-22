@@ -43,7 +43,17 @@ private struct WebView: NSViewRepresentable {
     let url: URL
 
     func makeNSView(context: Context) -> WKWebView {
-        let webView = WKWebView()
+        let configuration = WKWebViewConfiguration()
+        configuration.allowsInlinePredictions = false
+        configuration.userContentController.addUserScript(
+            WKUserScript(
+                source: Self.disableInputAssistanceScript,
+                injectionTime: .atDocumentEnd,
+                forMainFrameOnly: true
+            )
+        )
+
+        let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.isInspectable = true
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
@@ -59,6 +69,16 @@ private struct WebView: NSViewRepresentable {
     func makeCoordinator() -> Coordinator {
         Coordinator()
     }
+
+    private static let disableInputAssistanceScript = """
+    (() => {
+      document.body.spellcheck = false;
+      document.querySelectorAll('input, textarea, [contenteditable], [role="textbox"]')
+        .forEach((element) => {
+          element.autocomplete = 'off';
+        });
+    })();
+    """
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
