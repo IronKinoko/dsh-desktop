@@ -114,16 +114,16 @@ Do not commit generated build products, `DerivedData`, or Xcode user state.
   location:
 
   ```sh
+  rm -rf "/Applications/Deepseek Harness.app"
   ditto \
     "/tmp/dsh-desktop-derived/Build/Products/Release/Deepseek Harness.app" \
     "/Applications/Deepseek Harness.app"
   ```
 
-  Do not use `rm`, `rm -rf`, or other destructive deletion operations during
-  deployment. Do not delete the destination first. Overwrite the existing
-  application bundle in place through `ditto` instead. If the write requires
-  elevated permissions and they are unavailable, report the failure clearly;
-  do not silently fall back to another directory.
+  The deletion is limited to `/Applications/Deepseek Harness.app`; remove the
+  old app bundle before moving the new build into place so stale files cannot
+  survive. If the write requires elevated permissions and they are unavailable,
+  report the failure clearly; do not silently fall back to another directory.
 - When project settings or lifecycle behavior changes, run both the Debug
   build and the relevant manual checks above before installing the Release
   build.
