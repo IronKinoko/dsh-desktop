@@ -66,9 +66,15 @@ xcodebuild \
   build
 ```
 
-There is currently no test target. After changing process lifecycle, web
-loading, or menu bar behavior, verify manually with a working `dsh`
-installation:
+Use the unsigned Debug build for development verification and user review.
+Build the unsigned Release configuration only when the user explicitly asks
+to deploy. Never install into `/Applications` as part of the normal
+implementation workflow.
+
+There is currently no test target. The agent must complete all relevant
+automated checks and manual verification available for the change. After
+changing process lifecycle, web loading, or menu bar behavior, verify with a
+working `dsh` installation:
 
 1. Start the app and confirm the authenticated web UI loads.
 2. Select `Restart` and confirm a new process and token URL are loaded.
@@ -76,6 +82,17 @@ installation:
 4. Select `Quit` and confirm the `dsh` child process exits.
 5. If startup behavior changes, check port `49258` with
    `lsof -nP -iTCP:49258 -sTCP:LISTEN`.
+
+After all required tests pass, launch the unsigned Debug build for the user to
+review the change:
+
+```sh
+open "/tmp/dsh-desktop-derived/Build/Products/Debug/Deepseek Harness.app"
+```
+
+Keep the development app available for inspection and report that it has been
+started. Do not replace the app in `/Applications` until the user explicitly
+states that it should be deployed.
 
 Do not commit generated build products, `DerivedData`, or Xcode user state.
 
@@ -107,11 +124,16 @@ Do not commit generated build products, `DerivedData`, or Xcode user state.
   Avoid introducing an abstraction unless it removes meaningful duplication or
   matches an established platform pattern.
 - After any code or project configuration change, compile the project before
-  deployment. Required builds and relevant manual checks must all pass; do not
-  install a failed or unverified build.
-- After all required checks pass, overwrite-replace the successful unsigned
-  Release build at the system-level `/Applications/Deepseek Harness.app`
-  location:
+  handing off the change. Required builds and relevant manual checks must all
+  pass; do not launch a failed or unverified build.
+- After all required checks pass, start the unsigned Debug build from
+  `/tmp/dsh-desktop-derived/Build/Products/Debug/Deepseek Harness.app` and
+  leave it running for user review. This is the default completion point for
+  an implementation task.
+- Deploy only after the user explicitly confirms deployment. Then build the
+  unsigned Release configuration, rerun the relevant checks, and
+  overwrite-replace the successful build at the system-level
+  `/Applications/Deepseek Harness.app` location:
 
   ```sh
   rm -rf "/Applications/Deepseek Harness.app"
@@ -125,5 +147,6 @@ Do not commit generated build products, `DerivedData`, or Xcode user state.
   survive. If the write requires elevated permissions and they are unavailable,
   report the failure clearly; do not silently fall back to another directory.
 - When project settings or lifecycle behavior changes, run both the Debug
-  build and the relevant manual checks above before installing the Release
-  build.
+  build and the relevant manual checks above before handing off the Debug
+  build for user review. Build and verify the Release configuration only when
+  deployment has been explicitly requested.
