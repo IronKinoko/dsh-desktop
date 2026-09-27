@@ -17,6 +17,53 @@ struct ContentView: View {
             switch webService.state {
             case .starting:
                 ProgressView("Starting dsh web...")
+            case .updating(let progress):
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(spacing: 12) {
+                        ProgressView()
+                            .controlSize(.large)
+                        Text("Updating dsh to \(progress.tag)...")
+                            .font(.headline)
+                    }
+
+                    Text(progress.command)
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                        .padding(12)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            Color(nsColor: .textBackgroundColor),
+                            in: RoundedRectangle(cornerRadius: 8)
+                        )
+
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            Text(
+                                progress.output.isEmpty
+                                    ? "Waiting for npm output..."
+                                    : progress.output
+                            )
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(
+                                progress.output.isEmpty ? .secondary : .primary
+                            )
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .id("update-output-bottom")
+                        }
+                        .frame(maxHeight: 360)
+                        .padding(12)
+                        .background(
+                            Color(nsColor: .textBackgroundColor),
+                            in: RoundedRectangle(cornerRadius: 8)
+                        )
+                        .onChange(of: progress.output) {
+                            proxy.scrollTo("update-output-bottom", anchor: .bottom)
+                        }
+                    }
+                }
+                .frame(maxWidth: 820)
+                .padding(32)
             case .running(let url):
                 WebView(url: url)
                     .id(webService.reloadID)

@@ -27,6 +27,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private var statusItem: NSStatusItem?
     private let statusMenu = NSMenu()
+    private let updateMenu = NSMenu()
+    private var versionTags: [DSHVersionTag] = []
+    private var isLoadingVersionTags = false
+    private var isUpdating = false
+    private var updatingTag: DSHVersionTag?
+    private let updateTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        formatter.timeZone = .current
+        return formatter
+    }()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         configureStatusItem()
@@ -76,8 +87,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         webService.restart()
     }
 
+    @objc private func updateWebService(_ sender: NSMenuItem) {
+        guard !isUpdating,
+              let tagName = sender.representedObject as? String,
+              let tag = versionTags.first(where: { $0.name == tagName })
+        else {
+            return
+        }
+
+        isUpdating = true
+        updatingTag = tag
+        rebuildUpdateMenu(placeholder: "Updating \(tag.name)...")
+        showMainWindow()
+
+        Task {
+            do {
+                try await webService.update(to: tag.name)
+            } catch {
+                showUpdateError(error)
+            }
+
+            isUpdating = false
+            updatingTag = nil
+            refreshVersionTags()
+        }
+    }
+
     @objc private func quitApplication() {
         NSApp.terminate(nil)
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        guard menu === statusMenu else { return }
+        refreshVersionTags()
     }
 
     func menuDidClose(_ menu: NSMenu) {
@@ -98,6 +140,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 keyEquivalent: ""
             )
         )
+
+        let updateMenuItem = NSMenuItem(
+            title: "Update",
+            action: nil,
+            keyEquivalent: ""
+        )
+        updateMenuItem.submenu = updateMenu
+        updateMenuItem.isEnabled = true
+        statusMenu.addItem(updateMenuItem)
+        rebuildUpdateMenu(placeholder: "Loading...")
+
         statusMenu.addItem(.separator())
         statusMenu.addItem(
             NSMenuItem(
@@ -109,6 +162,92 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         statusMenu.items.forEach { $0.target = self }
         self.statusItem = statusItem
+    }
+
+    private func refreshVersionTags() {
+        guard !isLoadingVersionTags, !isUpdating else { return }
+
+        isLoadingVersionTags = true
+        if versionTags.isEmpty {
+            rebuildUpdateMenu(placeholder: "Loading...")
+        }
+
+        Task {
+            do {
+                versionTags = try await webService.availableVersionTags()
+                if !isUpdating {
+                    rebuildUpdateMenu()
+                }
+            } catch {
+                if versionTags.isEmpty {
+                    rebuildUpdateMenu(placeholder: "Unable to load tags")
+                }
+            }
+
+            isLoadingVersionTags = false
+        }
+    }
+
+    private func rebuildUpdateMenu(placeholder: String? = nil) {
+        updateMenu.removeAllItems()
+
+        if isUpdating {
+            if let updatingTag {
+                updateMenu.addItem(
+                    disabledMenuItem(title: "Updating \(updatingTag.name)...")
+                )
+            }
+            return
+        }
+
+        if let placeholder {
+            updateMenu.addItem(disabledMenuItem(title: placeholder))
+            return
+        }
+
+        guard !versionTags.isEmpty else {
+            updateMenu.addItem(disabledMenuItem(title: "No tags available"))
+            return
+        }
+
+        for (index, tag) in versionTags.enumerated() {
+            let item = NSMenuItem(
+                title: "\(tag.name) \(tag.version)",
+                action: #selector(updateWebService(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = tag.name
+            updateMenu.addItem(item)
+
+            if let publishedAt = tag.publishedAt {
+                updateMenu.addItem(
+                    disabledMenuItem(
+                        title: updateTimeFormatter.string(from: publishedAt)
+                    )
+                )
+            }
+
+            if index < versionTags.count - 1 {
+                updateMenu.addItem(.separator())
+            }
+        }
+    }
+
+    private func disabledMenuItem(title: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        return item
+    }
+
+    private func showUpdateError(_ error: Error) {
+        NSApp.activate(ignoringOtherApps: true)
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Unable to update dsh"
+        alert.informativeText = error.localizedDescription
+        alert.runModal()
     }
 
     private func statusBarImage() -> NSImage {

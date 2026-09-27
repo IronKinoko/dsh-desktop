@@ -18,6 +18,9 @@ The app starts a local `dsh web --no-open --port 49258` process, loads the print
   - Right click: open the menu.
 - Menu actions:
   - `Restart`: restart `dsh web` and reload the web view.
+  - `Update`: load the current npm dist-tags and publication times for
+    `@deepseek-ai/dsh`, stop `dsh web`, show the npm command and live output
+    while installing the selected tag, and then restart `dsh web`.
   - `Quit`: stop the service and quit the app.
 - External HTTP(S) links opened by the web UI are handed to the default browser.
 

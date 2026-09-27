@@ -4,8 +4,45 @@ import Foundation
 
 enum DSHWebState: Equatable {
     case starting
+    case updating(DSHUpdateProgress)
     case running(URL)
     case failed(String)
+}
+
+struct DSHUpdateProgress: Equatable {
+    let tag: String
+    let command: String
+    var output: String
+}
+
+struct DSHVersionTag: Equatable {
+    let name: String
+    let version: String
+    let publishedAt: Date?
+}
+
+private enum DSHCommandError: LocalizedError {
+    case executableNotFound(String)
+    case commandFailed(String, Int32, String)
+    case invalidOutput(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .executableNotFound(let name):
+            return "Unable to find \(name)."
+        case .commandFailed(let command, let status, let details):
+            let suffix = details.isEmpty ? "" : "\n\(details)"
+            return "\(command) exited with status \(status).\(suffix)"
+        case .invalidOutput(let message):
+            return message
+        }
+    }
+}
+
+private struct DSHCommandResult: Sendable {
+    let status: Int32
+    let standardOutput: String
+    let standardError: String
 }
 
 @MainActor
@@ -98,7 +135,7 @@ final class DSHWebService: ObservableObject {
         }
     }
 
-    private func processEnvironment() -> [String: String] {
+    private nonisolated func processEnvironment() -> [String: String] {
         var environment = ProcessInfo.processInfo.environment
         let home = FileManager.default.homeDirectoryForCurrentUser
 
@@ -134,7 +171,11 @@ final class DSHWebService: ObservableObject {
         return environment
     }
 
-    private func dshExecutable(in paths: [String]) -> URL? {
+    private nonisolated func dshExecutable(in paths: [String]) -> URL? {
+        executable(named: "dsh", in: paths)
+    }
+
+    private nonisolated func executable(named name: String, in paths: [String]) -> URL? {
         let searchPaths = paths.flatMap { path -> [String] in
             guard path.hasSuffix("/fnm_multishells") else { return [path] }
             return (try? FileManager.default.contentsOfDirectory(atPath: path))?
@@ -142,8 +183,266 @@ final class DSHWebService: ObservableObject {
         }
 
         return searchPaths
-            .map { URL(fileURLWithPath: $0).appendingPathComponent("dsh") }
+            .map { URL(fileURLWithPath: $0).appendingPathComponent(name) }
             .first { FileManager.default.isExecutableFile(atPath: $0.path) }
+    }
+
+    nonisolated func availableVersionTags() async throws -> [DSHVersionTag] {
+        let npm = try npmCommand()
+        let result = try await Self.runCommand(
+            executableURL: npm.executableURL,
+            arguments: ["view", "@deepseek-ai/dsh", "time", "dist-tags", "--json"],
+            environment: npm.environment
+        )
+
+        guard result.status == 0 else {
+            throw DSHCommandError.commandFailed(
+                "npm view",
+                result.status,
+                lastLines(of: result.standardError)
+            )
+        }
+
+        guard let data = result.standardOutput.data(using: .utf8),
+              let response = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rawTags = response["dist-tags"] as? [String: String]
+        else {
+            throw DSHCommandError.invalidOutput(
+                "npm view returned an invalid time and dist-tags response."
+            )
+        }
+
+        let rawTimes = response["time"] as? [String: String] ?? [:]
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        return rawTags
+            .map { name, version in
+                DSHVersionTag(
+                    name: name,
+                    version: version,
+                    publishedAt: rawTimes[version].flatMap(dateFormatter.date(from:))
+                )
+            }
+            .sorted(by: versionTagSort)
+    }
+
+    func update(to tag: String) async throws {
+        guard tag.range(of: #"^[A-Za-z0-9][A-Za-z0-9._-]*$"#, options: .regularExpression) != nil else {
+            throw DSHCommandError.invalidOutput("Invalid npm tag: \(tag)")
+        }
+
+        let command = "npm install --global @deepseek-ai/dsh@\(tag)"
+        state = .updating(
+            DSHUpdateProgress(
+                tag: tag,
+                command: command,
+                output: "Stopping dsh web...\n"
+            )
+        )
+        await stopForUpdate()
+
+        do {
+            let npm = try npmCommand()
+            var environment = npm.environment
+            environment["NO_COLOR"] = "1"
+
+            let status = try await Self.runStreamingCommand(
+                executableURL: npm.executableURL,
+                arguments: ["install", "--global", "@deepseek-ai/dsh@\(tag)"],
+                environment: environment
+            ) { [weak self] output in
+                guard let self else { return }
+                Task { @MainActor in
+                    self.appendUpdateOutput(output)
+                }
+            }
+
+            guard status == 0 else {
+                throw DSHCommandError.commandFailed(
+                    command,
+                    status,
+                    lastLines(of: updateOutput())
+                )
+            }
+
+            start()
+        } catch {
+            start()
+            throw error
+        }
+    }
+
+    private func appendUpdateOutput(_ output: String) {
+        guard case .updating(var progress) = state else { return }
+        progress.output += output
+        state = .updating(progress)
+    }
+
+    private func updateOutput() -> String {
+        guard case .updating(let progress) = state else { return "" }
+        return progress.output
+    }
+
+    private nonisolated func npmCommand() throws -> (
+        executableURL: URL,
+        environment: [String: String]
+    ) {
+        let environment = processEnvironment()
+        let paths = environment["PATH"]?
+            .split(separator: ":")
+            .map(String.init) ?? []
+
+        guard let executableURL = executable(named: "npm", in: paths) else {
+            throw DSHCommandError.executableNotFound("npm")
+        }
+
+        return (executableURL, environment)
+    }
+
+    private nonisolated func versionTagSort(_ lhs: DSHVersionTag, _ rhs: DSHVersionTag) -> Bool {
+        let rank = ["latest": 0, "alpha": 1]
+        let lhsRank = rank[lhs.name] ?? 2
+        let rhsRank = rank[rhs.name] ?? 2
+
+        if lhsRank != rhsRank {
+            return lhsRank < rhsRank
+        }
+
+        return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+    }
+
+    private nonisolated func lastLines(of output: String) -> String {
+        output
+            .split(whereSeparator: \.isNewline)
+            .suffix(8)
+            .joined(separator: "\n")
+    }
+
+    private nonisolated static func runCommand(
+        executableURL: URL,
+        arguments: [String],
+        environment: [String: String]
+    ) async throws -> DSHCommandResult {
+        try await Task.detached(priority: .utility) {
+            let process = Process()
+            let outputPipe = Pipe()
+            let errorPipe = Pipe()
+
+            process.executableURL = executableURL
+            process.arguments = arguments
+            process.environment = environment
+            process.standardInput = FileHandle.nullDevice
+            process.standardOutput = outputPipe
+            process.standardError = errorPipe
+
+            try process.run()
+
+            async let outputData = outputPipe.fileHandleForReading.readToEnd()
+            async let errorData = errorPipe.fileHandleForReading.readToEnd()
+
+            process.waitUntilExit()
+
+            return DSHCommandResult(
+                status: process.terminationStatus,
+                standardOutput: String(
+                    decoding: try await outputData ?? Data(),
+                    as: UTF8.self
+                ),
+                standardError: String(
+                    decoding: try await errorData ?? Data(),
+                    as: UTF8.self
+                )
+            )
+        }.value
+    }
+
+    private nonisolated static func runStreamingCommand(
+        executableURL: URL,
+        arguments: [String],
+        environment: [String: String],
+        onOutput: @escaping @Sendable (String) -> Void
+    ) async throws -> Int32 {
+        try await Task.detached(priority: .utility) {
+            let process = Process()
+            let outputPipe = Pipe()
+            let errorPipe = Pipe()
+
+            process.executableURL = executableURL
+            process.arguments = arguments
+            process.environment = environment
+            process.standardInput = FileHandle.nullDevice
+            process.standardOutput = outputPipe
+            process.standardError = errorPipe
+
+            try process.run()
+
+            async let outputReader = streamPipe(outputPipe, onOutput: onOutput)
+            async let errorReader = streamPipe(errorPipe, onOutput: onOutput)
+
+            process.waitUntilExit()
+            try await outputReader
+            try await errorReader
+
+            return process.terminationStatus
+        }.value
+    }
+
+    private nonisolated static func streamPipe(
+        _ pipe: Pipe,
+        onOutput: @escaping @Sendable (String) -> Void
+    ) async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            pipe.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+
+                if data.isEmpty {
+                    handle.readabilityHandler = nil
+                    continuation.resume()
+                    return
+                }
+
+                onOutput(String(decoding: data, as: UTF8.self))
+            }
+        }
+    }
+
+    private func stopForUpdate() async {
+        guard let process else { return }
+
+        isStopping = true
+        let processIdentifier = process.processIdentifier
+        process.terminate()
+
+        let exited = await Self.waitForProcessToExit(
+            processIdentifier,
+            timeout: 2
+        )
+
+        if !exited {
+            kill(processIdentifier, SIGKILL)
+            _ = await Self.waitForProcessToExit(processIdentifier, timeout: 2)
+        }
+
+        self.process = nil
+    }
+
+    private nonisolated static func waitForProcessToExit(
+        _ processIdentifier: pid_t,
+        timeout: TimeInterval
+    ) async -> Bool {
+        await Task.detached(priority: .utility) {
+            let deadline = Date().addingTimeInterval(timeout)
+
+            while Date() < deadline {
+                if kill(processIdentifier, 0) != 0 {
+                    return true
+                }
+                usleep(50_000)
+            }
+
+            return kill(processIdentifier, 0) != 0
+        }.value
     }
 
     private enum PortClearResult {
